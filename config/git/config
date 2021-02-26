@@ -1,0 +1,12 @@
+[alias]
+        ancestor = show-branch --merge-base
+        alias = config --get-regexp '^alias\\..'
+        fixup = commit --amend --no-edit --no-verify --allow-empty
+        wip = !git add -A && git commit -m \"WIP\"
+        fire = wip -m \"FIRE\"
+
+[fetch]
+	prune = true
+    
+[pull]
+	rebase = true
