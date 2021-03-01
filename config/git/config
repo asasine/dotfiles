@@ -4,6 +4,7 @@
         fixup = commit --amend --no-edit --no-verify --allow-empty
         wip = !git add -A && git commit -m \"WIP\"
         fire = wip -m \"FIRE\"
+        log-ns = log --name-status
 
 [fetch]
 	prune = true
