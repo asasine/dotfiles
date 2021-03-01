@@ -1,3 +1,6 @@
+[user]
+	name = Adam Sasine
+
 [alias]
         ancestor = show-branch --merge-base
         alias = config --get-regexp '^alias\\..'
