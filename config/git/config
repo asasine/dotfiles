@@ -7,6 +7,7 @@
         fixup = commit --amend --no-edit --no-verify --allow-empty
         wip = !git add -A && git commit -m \"WIP\"
         fire = !git wip -m \"FIRE\"
+        stat = diff --stat
         
         log-ns = log --name-status
         dog = log --decorate --oneline --graph
@@ -34,4 +35,3 @@
 
 [rebase]
 	autosquash = true
-
