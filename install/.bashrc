@@ -26,11 +26,18 @@ fi
 PATH="$DOTFILES_DIR/bin:$PATH"
 
 # source the dotfiles (order matters)
-for DOTFILE in $DOTFILES_DIR/system/.{env,aliases,prompt,completion}; do
-    if [ -f $DOTFILE ]; then
-        source $DOTFILE
+for DOTFILE in .{env,aliases,prompt,completion}; do
+    SYSTEM_DOTFILE=$DOTFILES_DIR/system/$DOTFILE
+    if [ -f $SYSTEM_DOTFILE ]; then
+        source $SYSTEM_DOTFILE
+    fi
+
+    LOCAL_DOTFILE=$HOME/$DOTFILE.local
+    if [ -f $LOCAL_DOTFILE ]; then
+        source $LOCAL_DOTFILE
     fi
 done
 
 unset READLINK CURRENT_SCRIPT SCRIPT_PATH DOTFILE
 export DOTFILES_DIR
+source "$HOME/.cargo/env"
