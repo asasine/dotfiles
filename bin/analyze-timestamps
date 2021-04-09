@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+
+import argparse
+import collections
+import quantiphy
+import re
+import statistics
+
+Command = collections.namedtuple("Command", ("command", "duration"))
+
+def s(x):
+    return quantiphy.Quantity(float(x), "s")
+
+
+def main(args):
+    pattern = r"^(?P<duration>\d+\.\d+) (\++) (?P<command>.+)$"
+    compiled = re.compile(pattern)
+    commands = []
+    with open(args.file) as f:
+        for line in f:
+            match = compiled.match(line)
+            if match:
+                c = match["command"]
+                d = s(match["duration"])
+                command = Command(c, d)
+                commands.append(command)
+            else:
+                if args.verbose:
+                    print("Not a match:", line)
+
+    print("Count:", len(commands))
+    key_command = lambda command: command.command
+    key_duration = lambda command: command.duration.real
+
+    max_duration = max(commands, key=key_duration)
+    print("Max:", max_duration)
+
+    min_duration = min(commands, key=key_duration)
+    print("Min:", min_duration)
+    
+    durations = list(map(key_duration, commands))
+    mean_duration = statistics.mean(durations)
+    median_duration = statistics.median(durations)
+    pstdev_duration = statistics.pstdev(durations)
+    print("Mean:", s(mean_duration))
+    print("Median:", s(median_duration))
+    print("Standard deviation (population):", s(pstdev_duration))
+
+    sum_durations = sum(durations)
+    print("Sum:", s(sum_durations))
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Analyze timestamps from ts",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-f", "--file", help="the timestamps file", default="/tmp/timestamps")
+    parser.add_argument("-v", "--verbose", help="enable verbose output", action="store_true")
+    args = parser.parse_args()
+
+    if args.verbose:
+        print(args)
+
+    main(args)

@@ -1,6 +1,23 @@
 
 # heavily inspired by https://github.com/webpro/dotfiles/blob/master/runcom/.bash_profile
 
+# debug to /tmp/timestamps to investigate slow startup
+DEBUG=false # set to true to debug
+if $DEBUG
+then
+  echo 'Debugging timestamps. View at /tmp/timestamps'
+  if [ -f /tmp/timestamps ];
+  then
+    mv -fv /tmp/timestamps /tmp/timestamps.old
+  fi
+
+  exec 5> >(ts -i "%.s" >> /tmp/timestamps)
+  export BASH_XTRACEFD="5"
+
+  # enable tracing
+  set -x
+fi
+
 # If not running interactively, don't do anything
 case $- in
     *i*) ;;
@@ -41,3 +58,9 @@ done
 unset READLINK CURRENT_SCRIPT SCRIPT_PATH DOTFILE
 export DOTFILES_DIR
 source "$HOME/.cargo/env"
+
+if $DEBUG
+then
+  # disable tracing
+  set +x
+fi
