@@ -2,32 +2,34 @@
 
 import argparse
 import collections
+import functools
 import quantiphy
 import re
 import statistics
 
 Command = collections.namedtuple("Command", ("command", "duration"))
+command_pattern = re.compile(r"^(?P<duration>\d+\.\d+) (\++) (?P<command>.+)$")
 
-def s(x):
+def seconds(x):
     return quantiphy.Quantity(float(x), "s")
 
 
-def main(args):
-    pattern = r"^(?P<duration>\d+\.\d+) (\++) (?P<command>.+)$"
-    compiled = re.compile(pattern)
-    commands = []
+def get_commands(args):
     with open(args.file) as f:
         for line in f:
-            match = compiled.match(line)
+            match = command_pattern.match(line)
             if match:
                 c = match["command"]
-                d = s(match["duration"])
+                d = seconds(match["duration"])
                 command = Command(c, d)
-                commands.append(command)
+                yield command
             else:
                 if args.verbose:
                     print("Not a match:", line)
 
+
+def main(args):
+    commands = list(get_commands(args))
     print("Count:", len(commands))
     key_command = lambda command: command.command
     key_duration = lambda command: command.duration.real
@@ -42,22 +44,55 @@ def main(args):
     mean_duration = statistics.mean(durations)
     median_duration = statistics.median(durations)
     pstdev_duration = statistics.pstdev(durations)
-    print("Mean:", s(mean_duration))
-    print("Median:", s(median_duration))
-    print("Standard deviation (population):", s(pstdev_duration))
+    print("Mean:", seconds(mean_duration))
+    print("Median:", seconds(median_duration))
+    print("Standard deviation (population):", seconds(pstdev_duration))
 
     sum_durations = sum(durations)
-    print("Sum:", s(sum_durations))
+    print("Sum:", seconds(sum_durations))
+
+def search(args):
+    wrap_in_parens = lambda s: f"({s})"
+    wrapped = map(wrap_in_parens, args.pattern)
+    joined = "|".join(wrapped)
+    pattern = wrap_in_parens(joined)
+
+    if args.verbose:
+        print("Searching for:", pattern)
+
+    commands = list(get_commands(args))
+    compiled = re.compile(pattern)
+    commands = map(lambda command: (command, compiled.match(command.command)), commands)
+    commands = filter(lambda match: match[1] is not None, commands)
+    commands = map(lambda match: match[0], commands)
+    commands = list(commands)
+    print("Count:", len(commands))
+    for command in commands:
+        print(command)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze timestamps from ts",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.set_defaults(func=main)
     parser.add_argument("-f", "--file", help="the timestamps file", default="/tmp/timestamps")
     parser.add_argument("-v", "--verbose", help="enable verbose output", action="store_true")
+
+    subparsers = parser.add_subparsers(help="all subcommands", title="subcommands", description="subcommands analyze timestamps differently")
+
+    parser_stats = subparsers.add_parser("statistics", aliases=["stats"], help="generate statistics on timestamps (default)")
+    parser_stats.set_defaults(func=main)
+
+    parser_search = subparsers.add_parser("search", help="search for specific commands")
+    parser_search.set_defaults(func=search)
+    parser_search.add_argument("pattern",
+        help="use the regex patterns for matching commands. If multiple patterns are provided, they are combined using logical OR.",
+        nargs="+")
+
     args = parser.parse_args()
 
     if args.verbose:
         print(args)
 
-    main(args)
+    args.func(args)
