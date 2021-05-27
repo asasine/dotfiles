@@ -18,3 +18,5 @@ alias ....="cd ../../.."
 alias .....="cd ../../../.."
 
 alias grep="grep --color=auto"
+
+alias get-ip='curl ipinfo.io/ip'
