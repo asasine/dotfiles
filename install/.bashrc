@@ -41,7 +41,7 @@ esac
 
 if [[ -n $CURRENT_SCRIPT && -x "$READLINK" && $machine != 'Unknown' ]]; then
   if [[ $machine == 'Linux' ]]; then
-  SCRIPT_PATH=$($READLINK -f "$CURRENT_SCRIPT")
+    SCRIPT_PATH=$($READLINK -f "$CURRENT_SCRIPT")
   elif [[ $machine == 'Mac' ]]; then
     SCRIPT_PATH=$($READLINK "$CURRENT_SCRIPT")
   fi
@@ -74,7 +74,10 @@ done
 
 unset READLINK CURRENT_SCRIPT SCRIPT_PATH DOTFILE
 export DOTFILES_DIR
-source "$HOME/.cargo/env"
+
+if [ -f "$HOME/.cargo/env" ]; then
+  source "$HOME/.cargo/env"
+fi
 
 if $DEBUG
 then
