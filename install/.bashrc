@@ -27,8 +27,25 @@ esac
 READLINK=$(which greadlink 2>/dev/null || which readlink)
 CURRENT_SCRIPT=$BASH_SOURCE
 
-if [[ -n $CURRENT_SCRIPT && -x "$READLINK" ]]; then
+case "$(uname -s)" in
+  Darwin*)
+    machine=Mac
+    ;;
+  Linux*)
+    machine=Linux
+    ;;
+  *)
+    machine=Unknown
+    ;;
+esac
+
+if [[ -n $CURRENT_SCRIPT && -x "$READLINK" && $machine != 'Unknown' ]]; then
+  if [[ $machine == 'Linux' ]]; then
   SCRIPT_PATH=$($READLINK -f "$CURRENT_SCRIPT")
+  elif [[ $machine == 'Mac' ]]; then
+    SCRIPT_PATH=$($READLINK "$CURRENT_SCRIPT")
+  fi
+
   DOTFILES_DIR=$(dirname "$(dirname "$SCRIPT_PATH")")
 elif [ -d "$HOME/.dotfiles" ]; then
   DOTFILES_DIR="$HOME/.dotfiles"
