@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+import argparse
+import math
+import random
+
+def alternate_capitalization(text):
+    """
+    Spongebobifies a string by alternating between upper and lowercase characters.
+    """
+
+    result = ""
+    upper = random.random() < 0.5
+    for character in text:
+        if character.isalpha():
+            result += character.upper() if upper else character.lower()
+            upper = not upper
+        else:
+            result += character
+
+    return result
+
+def randomize_capitalization(text, percent_upper=0.5):
+    result = ""
+    def should_be_upper():
+        return random.random() < (1.0 - percent_upper)
+
+    for character in text:
+        if character.isalpha():
+            result += character.upper() if should_be_upper() else character.lower()
+        else:
+            result += character
+
+    return result
+
+def main():
+    parser = argparse.ArgumentParser(description="SpOnGeBoBiFy A sTrInG")
+
+    parser.add_argument("text", nargs="+", help="The text to transform")
+    parser.add_argument("--random", action="store_true", help="Use random capitalization instead of alternating")
+    parser.add_argument("--copy", action="store_true", help="Copy the result to your clipboard")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+
+    args = parser.parse_args()
+
+    if args.verbose:
+        print(args)
+
+    text = " ".join(args.text)
+    if args.random:
+        result = randomize_capitalization(text)
+    else:
+        result = alternate_capitalization(text)
+
+    if args.verbose:
+        count_upper = 0
+        count_alpha = 0
+        for character in result:
+            if character.isalpha():
+                count_alpha += 1
+                if character.isupper():
+                    count_upper += 1
+
+        count_lower = count_alpha - count_upper
+        count = len(result)
+        length_of_count = int(math.log10(count)) + 1
+        count_format = f"0{length_of_count}d"
+
+        print()
+        print(f"Total characters: {len(result)}")
+        print(f"Total alphabetic: {format(count_alpha, count_format)} ({100.0 * count_alpha / len(result):0.1f}%)")
+        print(f"Total uppercase:  {format(count_upper, count_format)} ({100.0 * count_upper / count_alpha:0.1f}%)")
+        print(f"Total lowercase:  {format(count_lower, count_format)} ({100.0 * count_lower / count_alpha:0.1f}%)")
+        print()
+        
+
+    print(result)
+
+    if args.copy:
+        try:
+            import pyperclip
+        except ImportError:
+            print("Cannot copy: pyperclip package is not installed")
+            return
+
+        pyperclip.copy(result)
+
+        
+
+if __name__ == "__main__":
+    main()
