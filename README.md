@@ -1,5 +1,5 @@
 # dotfiles
-My personal collection of dotfiles.
+My personal collection of dotfiles and scripts.
 
 ## Getting started
 1. Clone the repo
@@ -14,6 +14,5 @@ My personal collection of dotfiles.
 Thanks to the following repositories for inspiration and help
 - https://github.com/webpro/dotfiles
 
- ## TODO
- - Use GNU Stow to manage symlinks http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dotfiles.html
- - Add installation of common utilities like Git
+## TODO
+- Use GNU Stow to manage symlinks http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dotfiles.html
