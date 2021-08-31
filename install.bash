@@ -25,6 +25,7 @@ for file in $(ls -A $base_dir); do
     fi
 
     echo "Creating symlink to $base_dir/$file/ in ~/.$base_dir"
+    mkdir -p ~/.$base_dir
     ln -svf ~/dotfiles/$base_dir/$file ~/.$base_dir/$file
 done
 
