@@ -34,6 +34,7 @@ base_dir="setup"
 echo
 echo "Running all executable scripts in $base_dir"
 for file in $(ls -A $base_dir); do
+    echo
     if [ -x $base_dir/$file ]
     then
         echo "Running ./$base_dir/$file"
