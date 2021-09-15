@@ -72,11 +72,27 @@ for DOTFILE in .{env,aliases,prompt,completion}; do
     fi
 done
 
-unset READLINK CURRENT_SCRIPT SCRIPT_PATH DOTFILE
+unset READLINK CURRENT_SCRIPT SCRIPT_PATH DOTFILE SYSTEM_DOTFILE LOCAL_DOTFILE
 export DOTFILES_DIR
 
 if [ -f "$HOME/.cargo/env" ]; then
   source "$HOME/.cargo/env"
+fi
+
+if is-macos;
+then
+  if type brew &>/dev/null; then
+    HOMEBREW_PREFIX="$(brew --prefix)"
+    if [[ -r "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh" ]]; then
+      source "${HOMEBREW_PREFIX}/etc/profile.d/bash_completion.sh"
+    else
+      for COMPLETION in "${HOMEBREW_PREFIX}/etc/bash_completion.d/"*; do
+        [[ -r "$COMPLETION" ]] && source "$COMPLETION"
+      done
+
+      unset COMPLETION
+    fi
+  fi
 fi
 
 if $DEBUG
