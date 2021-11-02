@@ -1,5 +1,27 @@
 #!/bin/bash
 
+
+
+READLINK=$(which greadlink 2>/dev/null || which readlink)
+CURRENT_SCRIPT=$BASH_SOURCE
+
+if [[ -n $CURRENT_SCRIPT && -x "$READLINK" && $machine != 'Unknown' ]]; then
+  if [[ $machine == 'Linux' ]]; then
+    SCRIPT_PATH=$($READLINK -f "$CURRENT_SCRIPT")
+  elif [[ $machine == 'Mac' ]]; then
+    SCRIPT_PATH=$($READLINK "$CURRENT_SCRIPT")
+  fi
+
+  DOTFILES_DIR=$($READLINK -m $(dirname "$(dirname "$SCRIPT_PATH")"))
+elif [ -d "$HOME/.dotfiles" ]; then
+  DOTFILES_DIR="$HOME/.dotfiles"
+elif [ -d "$HOME/dotfiles" ]; then
+  DOTFILES_DIR="$HOME/dotfiles"
+else
+  echo "Unable to find dotfiles, exiting."
+  return
+fi
+
 # link install files to ~
 base_dir="install"
 echo "Linking dotfiles from $base_dir to ~"
@@ -11,7 +33,7 @@ for file in $(ls -A $base_dir); do
     fi
 
     echo "Creating symlink to $base_dir/$file in home directory."
-    ln -svf ~/dotfiles/$base_dir/$file ~/$file
+    ln -svf $DOTFILES_DIR/$base_dir/$file ~/$file
 done
 
 # link config directories to ~/.config
@@ -26,7 +48,13 @@ for file in $(ls -A $base_dir); do
 
     echo "Creating symlink to $base_dir/$file/ in ~/.$base_dir"
     mkdir -p ~/.$base_dir
-    ln -svf ~/dotfiles/$base_dir/$file ~/.$base_dir/$file
+
+    # -s: symbolic
+    # -v: verbose
+    # -f: force (delete if LINK_NAME already exists)
+    # -n: don't dereference LINK_NAME if it's a symlink to a directory
+    #   -n is necessary to avoid recursively linking to config/git/git/git/...
+    ln -svfn $DOTFILES_DIR/$base_dir/$file ~/.$base_dir/$file
 done
 
 # run scripts in setup
