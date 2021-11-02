@@ -57,10 +57,15 @@ else
 fi
 
 # utilities
-PATH="$DOTFILES_DIR/bin:$PATH"
+if [[ $(type -t path_prepend_idempotent) == function ]];
+then
+  path_prepend_idempotent "$DOTFILES_DIR/bin"
+else
+  PATH="$DOTFILES_DIR/bin:$PATH"
+fi
 
 # source the dotfiles (order matters)
-for DOTFILE in .{env,aliases,prompt,completion}; do
+for DOTFILE in .{env,aliases,prompt,completion,functions}; do
     SYSTEM_DOTFILE=$DOTFILES_DIR/system/$DOTFILE
     if [ -f $SYSTEM_DOTFILE ]; then
         source $SYSTEM_DOTFILE
