@@ -1,4 +1,5 @@
 alias src="echo 'Sourcing ~/.bashrc' && source ~/.bashrc"
+alias path="echo \"\${PATH//:/$'\\n'}\""
 
 ## listing and directories
 LS_COLORS=$(is-supported "ls --color" --color -G)
