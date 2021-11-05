@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+
+import argparse
+import calendar
+import datetime
+from dateutil import relativedelta, rrule
+
+weekdays = list(calendar.day_name)
+
+def calculate_biweekly(args):
+    """Calculate the number of two-week periods between args.today and args.date, starting on args.previous_period."""
+    print(f"Calculating biweekly from {args.today} to {args.date} with period starting on {args.previous_period}")
+    
+    # every 2 weeks
+    dates = rrule.rrule(rrule.WEEKLY, interval=2, dtstart=args.previous_period, until=args.date)
+
+    # only include occurrences after today
+    dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
+
+    # cache the results
+    dates = list(dates)
+
+    if args.verbose:
+        print("Dates:")
+        for i, d in enumerate(dates):
+            print(f"\t{i + 1:03d}:\t{d.date()} ({d.date():%A})")
+
+        print()
+
+    return len(dates) * args.rate + args.current_hours
+
+def calculate_bimonthly(args):
+    """Calculate the number of periods between args.today and args.date, starting on args.previous_period, where a period is the 15th and last day of the month."""
+    print(f"Calculating bimonthly from {args.today} to {args.date} with period starting on {args.previous_period}")
+
+    dates = rrule.rruleset()
+
+    # 15th of the month, if it's a weekday
+    dates.rrule(rrule.rrule(rrule.MONTHLY, bymonthday=15, byweekday=(rrule.MO, rrule.TU, rrule.WE, rrule.TH, rrule.FR),
+        dtstart=args.previous_period, until=args.date))
+
+    # the Friday before the 15th, if the 15th is a weekend
+    # if the 15th is a weekend, the Friday before must be the 13th (Sunday, the 15th) or 14th (Saturday, the 15th)
+    dates.rrule(rrule.rrule(rrule.MONTHLY, bymonthday=(13, 14), byweekday=(rrule.FR),
+        dtstart=args.previous_period, until=args.date))
+
+    # the last weekday of the month
+    dates.rrule(rrule.rrule(rrule.MONTHLY, bysetpos=-1, byweekday=(rrule.MO, rrule.TU, rrule.WE, rrule.TH, rrule.FR),
+        dtstart=args.previous_period, until=args.date))
+
+    # only include occurrences after today
+    dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
+    
+    # cache the results
+    dates = list(dates)
+
+    if args.verbose:
+        print("Dates:")
+        for i, d in enumerate(dates):
+            print(f"\t{i + 1:03d}:\t{d.date()} ({d.date():%A})")
+
+        print()
+    
+    return len(dates) * args.rate + args.current_hours
+
+def calculate_annually(args):
+    """Calculate the number of periods between args.today and args.date, starting on args.previous_period, where a period is one year."""
+    print(f"Calculating annually from {args.today} to {args.date} with period starting on {args.previous_period}")
+
+    dates = rrule.rruleset()
+
+    # January 1st, if it's a weekday
+    dates.rrule(rrule.rrule(rrule.YEARLY, bymonth=1, bymonthday=1, byweekday=(rrule.MO, rrule.TU, rrule.WE, rrule.TH, rrule.FR),
+        dtstart=args.previous_period, until=args.date))
+
+    # the Monday after the 1st, if the 1st is a weekend
+    # if the 1st is a weekend, the Monday after must be the 2nd (Sunday, the 1st) or 3rd (Saturday, the 1st)
+    dates.rrule(rrule.rrule(rrule.YEARLY, bymonth=1, bymonthday=(2, 3), byweekday=(rrule.MO),
+        dtstart=args.previous_period, until=args.date))
+
+    # only include occurrences after today
+    dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
+    
+    # cache the results
+    dates = list(dates)
+
+    if args.verbose:
+        print("Dates:")
+        for i, d in enumerate(dates):
+            print(f"\t{i + 1:03d}:\t{d.date()} ({d.date():%A})")
+
+        print()
+    
+    return len(dates) * args.rate + args.current_hours
+
+def get_default_previous_period(args) -> datetime.date:
+    today: datetime.date = args.today
+    if args.previous_period is not None:
+        return args.previous_period
+    elif args.period == "biweekly":
+        # the Friday before args.today, or today if it's Friday
+        return today + relativedelta.relativedelta(weekday=relativedelta.FR(-1))
+    elif args.period == "bimonthly":
+        # previous 15th or last day of the month (or preceding Friday, if on a weekend)
+        months = 0
+        day = 31
+        candidate = today + relativedelta.relativedelta(day=day)
+        while candidate > today:
+            candidate = today + relativedelta.relativedelta(day=day, months=months)
+            if candidate.weekday() in (5, 6):
+                candidate += relativedelta.relativedelta(weekday=relativedelta.FR(-1))
+
+
+            if day == 31:
+                day = 15
+            else:
+                day = 31
+                months -= 1
+
+        return candidate
+    elif args.period == "annually":
+        # previous January 1st (or following Monday, if on a weekend)
+        candidate = today + relativedelta.relativedelta(month=1, day=1)
+        if candidate.weekday() in (5, 6):
+            # 1st is on a weekend, find the next Monday
+            candidate += relativedelta.relativedelta(weekday=relativedelta.MO)
+
+        return candidate
+    else:
+        return datetime.date.today()
+
+periods = {
+    "biweekly": calculate_biweekly,
+    "bimonthly": calculate_bimonthly,
+    "annually": calculate_annually,
+}
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Calculates PTO (Paid Time Off) based on a fixed period and accrual rate.",
+        epilog="""
+
+Accrual periods:
+- Biweekly accrues every two weeks, starting from the previous Friday by default.
+- Bimonthly accrues twice a month, starting from the previous 15th or last day of the month. If this date is on a weekend, the preceding Friday is used instead.
+- Annually accrues once per year, starting from January 1st. If January 1st is on a weekend, the following Monday is used instead.
+"""
+    )
+
+    parser.add_argument("period", help="Length of time where hours are accrued.", choices=periods.keys())
+    parser.add_argument("rate", help="Number of hours accrued per period", type=float)
+    parser.add_argument("date", help="Target date to determine hours accrued", type=datetime.date.fromisoformat)
+    parser.add_argument("--current-hours", help="Hours currently accured", type=float, default=0.0)
+    parser.add_argument("--today", help="The starting date", type=datetime.date.fromisoformat, default=datetime.date.today())
+    parser.add_argument("--previous-period", help="The end of the previous period, when hours were last accrued.",
+        type=datetime.date.fromisoformat, default=None)
+    
+    parser.add_argument("--days", help="Display days of PTO", action="store_true")
+    parser.add_argument("-v", "--verbose", help="Enable verbose output", action="store_true")
+
+    args = parser.parse_known_args()[0]
+
+    parser.set_defaults(previous_period=get_default_previous_period(args))
+
+    args = parser.parse_args()
+
+    if args.previous_period > args.today:
+        parser.exit(1, "PREVIOUS_PERIOD should be before or equal to TODAY\n")
+
+    if args.verbose:
+        print(args)
+
+    pto = periods[args.period](args)
+    if args.days:
+        pto /= 8.0
+
+    print(f"Hours available on {args.date} ({args.date:%A}): {pto}")
