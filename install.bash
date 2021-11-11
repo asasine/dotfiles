@@ -57,6 +57,9 @@ for file in $(ls -A $base_dir); do
     ln -svfn $DOTFILES_DIR/$base_dir/$file ~/.$base_dir/$file
 done
 
+# source new bashrc
+source ~/.bashrc
+
 # run scripts in setup
 base_dir="setup"
 echo
