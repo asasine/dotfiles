@@ -11,6 +11,9 @@ alias ll="ls -lA $LS_COLORS"
 alias lt="ls -lhAtr $LS_COLORS $LS_TIMESTYLEISO $LS_GROUPDIRSFIRST"
 alias ld="ls -ld $LS_COLORS */"
 
+alias cp="cp -iv"
+alias mv="mv -iv"
+
 unset LS_COLORS LS_TIMESTYLEISO LS_GROUPDIRSFIRST
 
 alias ..="cd .."
