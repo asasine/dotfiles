@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+git cherry-pick --no-commit "$1" && git commit --reset-author --reuse-message="$1"
