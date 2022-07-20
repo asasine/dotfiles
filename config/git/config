@@ -10,6 +10,7 @@
         stat = diff --stat
         pusho = !git push --set-upstream origin $(git branch --show-current)
         resetho = !git reset --hard origin/$(git branch --show-current)
+        fresetho = !git fetch && git resetho
         
         log-ns = log --name-status
         dog = log --decorate --oneline --graph
