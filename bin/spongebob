@@ -37,8 +37,8 @@ def main():
     parser = argparse.ArgumentParser(description="SpOnGeBoBiFy A sTrInG")
 
     parser.add_argument("text", nargs="+", help="The text to transform")
-    parser.add_argument("--random", action="store_true", help="Use random capitalization instead of alternating")
-    parser.add_argument("--copy", action="store_true", help="Copy the result to your clipboard")
+    parser.add_argument("--alternate", action="store_true", help="Use alternating capitalization instead of random")
+    parser.add_argument("--no-copy", action="store_true", help="Copy the result to your clipboard")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
     args = parser.parse_args()
@@ -47,10 +47,10 @@ def main():
         print(args)
 
     text = " ".join(args.text)
-    if args.random:
-        result = randomize_capitalization(text)
-    else:
+    if args.alternate:
         result = alternate_capitalization(text)
+    else:
+        result = randomize_capitalization(text)
 
     if args.verbose:
         count_upper = 0
@@ -76,7 +76,7 @@ def main():
 
     print(result)
 
-    if args.copy:
+    if not args.no_copy:
         try:
             import pyperclip
         except ImportError:
