@@ -135,6 +135,14 @@ periods = {
     "annually": calculate_annually,
 }
 
+def fromisoformat(date: str) -> datetime.date:
+    """
+    Parse a date in YYYY-MM-DD format.
+    
+    This is a workaround for versions before Python 3.7, which don't have datetime.date.fromisoformat.
+    """
+    return datetime.datetime.strptime(date, "%Y-%m-%d").date()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Calculates PTO (Paid Time Off) based on a fixed period and accrual rate.",
@@ -149,11 +157,11 @@ Accrual periods:
 
     parser.add_argument("period", help="Length of time where hours are accrued.", choices=periods.keys())
     parser.add_argument("rate", help="Number of hours accrued per period", type=float)
-    parser.add_argument("date", help="Target date to determine hours accrued", type=datetime.date.fromisoformat)
+    parser.add_argument("date", help="Target date to determine hours accrued", type=fromisoformat)
     parser.add_argument("--current-hours", help="Hours currently accured", type=float, default=0.0)
-    parser.add_argument("--today", help="The starting date", type=datetime.date.fromisoformat, default=datetime.date.today())
+    parser.add_argument("--today", help="The starting date", type=fromisoformat, default=datetime.date.today())
     parser.add_argument("--previous-period", help="The end of the previous period, when hours were last accrued.",
-        type=datetime.date.fromisoformat, default=None)
+        type=fromisoformat, default=None)
     
     parser.add_argument("--days", help="Display days of PTO", action="store_true")
     parser.add_argument("-v", "--verbose", help="Enable verbose output", action="store_true")
