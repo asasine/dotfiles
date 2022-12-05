@@ -2,10 +2,47 @@
 
 import argparse
 import calendar
+import collections
 import datetime
+import itertools
+from typing import List
 from dateutil import relativedelta, rrule
 
 weekdays = list(calendar.day_name)
+InnerAccumulated = collections.namedtuple("InnerAccumulated", ["date", "running_hours"])
+
+def accumulate_pto(args, datetimes: List[datetime.datetime]):
+    """
+    Calculates the number of accumulated hours of PTO for the given dates.
+
+    Args:
+        args: The command-line arguments.
+        datetimes: A list of datetimes for which to calculate the number of accumulated hours.
+    """
+
+    def f(current: InnerAccumulated, next_date: datetime.date) -> InnerAccumulated:
+        """Calculate the number of accumulated hours for the given date."""
+        return InnerAccumulated(next_date, current.running_hours + args.rate)
+
+    dates = map(lambda d: d.date(), datetimes)
+    accumulated = itertools.chain([InnerAccumulated(args.today, args.current_hours)], dates)
+    accumulated = itertools.accumulate(accumulated, f)
+    accumulated = list(accumulated)
+    if args.verbose:
+        print("Dates:")
+        for i, inner_accumulated in enumerate(accumulated):
+            d = inner_accumulated.date
+            h = inner_accumulated.running_hours
+            print(f"\t{i:03d}: {d} ({d:%A}): ", end="")
+
+            if args.days:
+                print(f"{h / 8:.02f} days")
+            else:
+                print(f"{h:.02f} hours")
+
+        print()
+
+    return accumulated[-1].running_hours
 
 def calculate_biweekly(args):
     """Calculate the number of two-week periods between args.today and args.date, starting on args.previous_period."""
@@ -20,14 +57,7 @@ def calculate_biweekly(args):
     # cache the results
     dates = list(dates)
 
-    if args.verbose:
-        print("Dates:")
-        for i, d in enumerate(dates):
-            print(f"\t{i + 1:03d}:\t{d.date()} ({d.date():%A})")
-
-        print()
-
-    return len(dates) * args.rate + args.current_hours
+    return accumulate_pto(args, dates)
 
 def calculate_bimonthly(args):
     """Calculate the number of periods between args.today and args.date, starting on args.previous_period, where a period is the 15th and last day of the month."""
@@ -53,15 +83,8 @@ def calculate_bimonthly(args):
     
     # cache the results
     dates = list(dates)
-
-    if args.verbose:
-        print("Dates:")
-        for i, d in enumerate(dates):
-            print(f"\t{i + 1:03d}:\t{d.date()} ({d.date():%A})")
-
-        print()
     
-    return len(dates) * args.rate + args.current_hours
+    return accumulate_pto(args, dates)
 
 def calculate_annually(args):
     """Calculate the number of periods between args.today and args.date, starting on args.previous_period, where a period is one year."""
@@ -84,15 +107,8 @@ def calculate_annually(args):
     # cache the results
     dates = list(dates)
 
-    if args.verbose:
-        print("Dates:")
-        for i, d in enumerate(dates):
-            print(f"\t{i + 1:03d}:\t{d.date()} ({d.date():%A})")
-
-        print()
+    return accumulate_pto(args, dates)
     
-    return len(dates) * args.rate + args.current_hours
-
 def get_default_previous_period(args) -> datetime.date:
     today: datetime.date = args.today
     if args.previous_period is not None:
@@ -182,4 +198,5 @@ Accrual periods:
     if args.days:
         pto /= 8.0
 
-    print(f"Hours available on {args.date} ({args.date:%A}): {pto}")
+    pto_word = "days" if args.days else "hours"
+    print(f"{pto_word.capitalize()} available on {args.date} ({args.date:%A}): {pto:.02f}")
