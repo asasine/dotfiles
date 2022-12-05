@@ -7,9 +7,13 @@ import datetime
 import itertools
 from typing import List
 from dateutil import relativedelta, rrule
+from rich.console import Console
+from rich.table import Table, Column
 
+console = Console()
 weekdays = list(calendar.day_name)
 InnerAccumulated = collections.namedtuple("InnerAccumulated", ["date", "running_hours"])
+
 
 def accumulate_pto(args, datetimes: List[datetime.datetime]):
     """
@@ -29,18 +33,22 @@ def accumulate_pto(args, datetimes: List[datetime.datetime]):
     accumulated = itertools.accumulate(accumulated, f)
     accumulated = list(accumulated)
     if args.verbose:
-        print("Dates:")
+        dates_table = Table(
+            Column("Period", justify="right"),
+            "Date",
+            "Day",
+            Column("Days" if args.days else "Hours", justify="right"),
+            title="Pay Periods")
+
         for i, inner_accumulated in enumerate(accumulated):
             d = inner_accumulated.date
-            h = inner_accumulated.running_hours
-            print(f"\t{i:03d}: {d} ({d:%A}): ", end="")
-
+            pto = inner_accumulated.running_hours
             if args.days:
-                print(f"{h / 8:.02f} days")
-            else:
-                print(f"{h:.02f} hours")
+                pto /= 8
 
-        print()
+            dates_table.add_row(str(i), str(d), f"{d:%A}", f"{pto:.02f}")
+
+        console.print(dates_table)
 
     return accumulated[-1].running_hours
 
@@ -85,7 +93,7 @@ def get_annually_rrule(args):
 
     return dates
 
-    
+
 rrules = {
     "biweekly": get_biweekly_rrule,
     "bimonthly": get_bimonthly_rrule,
@@ -98,8 +106,9 @@ def get_dates_after(rrule: rrule.rrule, today: datetime.date) -> List[datetime.d
 
 def calculate_pto(args):
     """Calculate the number of periods between args.today and args.date, starting on args.previous_period, given the pay period type args.period."""
-    print(f"Calculating {args.period} from {args.today} to {args.date} with period starting on {args.previous_period}")
-    
+    console.print(f"Calculating {args.period} from {args.today} to {args.date} with period starting on {args.previous_period}")
+
+
     dates = rrules[args.period](args)
 
     # only include occurrences after today
@@ -112,10 +121,10 @@ def calculate_pto(args):
         additional_hours = args.floating_holidays * 8
         accumulated_pto += additional_hours
         if args.verbose:
-            print(f"Adding {additional_hours:0.2f} floating holidays ({args.floating_holidays:0.2f} days) for the {new_years[-1].date()} ({new_years[-1]:%A}), the first business day after New Years Day.")
+            console.print(f"Adding {additional_hours:0.2f} floating holidays ({args.floating_holidays:0.2f} days) for {new_years[-1].date()} ({new_years[-1]:%A}), the first business day after New Years Day.")
 
     return accumulated_pto
-    
+
 def get_default_previous_period(args) -> datetime.date:
     today: datetime.date = args.today
     if args.previous_period is not None:
@@ -155,7 +164,7 @@ def get_default_previous_period(args) -> datetime.date:
 def fromisoformat(date: str) -> datetime.date:
     """
     Parse a date in YYYY-MM-DD format.
-    
+
     This is a workaround for versions before Python 3.7, which don't have datetime.date.fromisoformat.
     """
     return datetime.datetime.strptime(date, "%Y-%m-%d").date()
@@ -182,7 +191,7 @@ Accrual periods:
 
     parser.add_argument("--floating-holidays", help="Additional days of vacation that accrue instantly on January 1st and do not roll over.",
         default=0, type=int)
-    
+
     parser.add_argument("--days", help="Display days of PTO", action="store_true")
     parser.add_argument("-v", "--verbose", help="Enable verbose output", action="store_true")
 
@@ -196,11 +205,11 @@ Accrual periods:
         parser.exit(1, "PREVIOUS_PERIOD should be before or equal to TODAY\n")
 
     if args.verbose:
-        print(args)
+        console.print(args)
 
     pto = calculate_pto(args)
     if args.days:
         pto /= 8.0
 
     pto_word = "days" if args.days else "hours"
-    print(f"{pto_word.capitalize()} available on {args.date} ({args.date:%A}): {pto:.02f}")
+    console.print(f"{pto_word.capitalize()} available on {args.date} ({args.date:%A}): {pto:.02f}")
