@@ -46,8 +46,6 @@ def accumulate_pto(args, datetimes: List[datetime.datetime]):
 
 def get_biweekly_rrule(args):
     """Create a recurrence rule for two-week pay periods between args.today and args.date, starting on args.previous_period."""
-    print(f"Calculating biweekly from {args.today} to {args.date} with period starting on {args.previous_period}")
-    
     # every 2 weeks
     dates = rrule.rrule(rrule.WEEKLY, interval=2, dtstart=args.previous_period, until=args.date)
 
@@ -55,8 +53,6 @@ def get_biweekly_rrule(args):
 
 def get_bimonthly_rrule(args):
     """Create a recurrence rule for pay periods between args.today and args.date, starting on args.previous_period, where a period is the 15th and last day of the month."""
-    print(f"Calculating bimonthly from {args.today} to {args.date} with period starting on {args.previous_period}")
-
     dates = rrule.rruleset()
 
     # 15th of the month, if it's a weekday
@@ -76,8 +72,6 @@ def get_bimonthly_rrule(args):
 
 def get_annually_rrule(args):
     """Create a recurrence rule for pay periods between args.today and args.date, starting on args.previous_period, where a period is one year."""
-    print(f"Calculating annually from {args.today} to {args.date} with period starting on {args.previous_period}")
-
     dates = rrule.rruleset()
 
     # January 1st, if it's a weekday
@@ -98,17 +92,29 @@ rrules = {
     "annually": get_annually_rrule,
 }
 
+def get_dates_after(rrule: rrule.rrule, today: datetime.date) -> List[datetime.datetime]:
+    """Get all dates in the recurrence rule after the given date."""
+    return list(rrule.xafter(datetime.datetime.now().replace(year=today.year, month=today.month, day=today.day)))
+
 def calculate_pto(args):
     """Calculate the number of periods between args.today and args.date, starting on args.previous_period, given the pay period type args.period."""
+    print(f"Calculating {args.period} from {args.today} to {args.date} with period starting on {args.previous_period}")
+    
     dates = rrules[args.period](args)
 
     # only include occurrences after today
-    dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
-    
-    # cache the results
-    dates = list(dates)
+    dates = get_dates_after(dates, args.today)
 
-    return accumulate_pto(args, dates)
+    accumulated_pto = accumulate_pto(args, dates)
+
+    new_years = get_dates_after(get_annually_rrule(args), args.today)
+    if len(new_years) > 0:
+        additional_hours = args.floating_holidays * 8
+        accumulated_pto += additional_hours
+        if args.verbose:
+            print(f"Adding {additional_hours:0.2f} floating holidays ({args.floating_holidays:0.2f} days) for the {new_years[-1].date()} ({new_years[-1]:%A}), the first business day after New Years Day.")
+
+    return accumulated_pto
     
 def get_default_previous_period(args) -> datetime.date:
     today: datetime.date = args.today
@@ -126,7 +132,6 @@ def get_default_previous_period(args) -> datetime.date:
             candidate = today + relativedelta.relativedelta(day=day, months=months)
             if candidate.weekday() in (5, 6):
                 candidate += relativedelta.relativedelta(weekday=relativedelta.FR(-1))
-
 
             if day == 31:
                 day = 15
@@ -174,6 +179,9 @@ Accrual periods:
     parser.add_argument("--today", help="The starting date", type=fromisoformat, default=datetime.date.today())
     parser.add_argument("--previous-period", help="The end of the previous period, when hours were last accrued.",
         type=fromisoformat, default=None)
+
+    parser.add_argument("--floating-holidays", help="Additional days of vacation that accrue instantly on January 1st and do not roll over.",
+        default=0, type=int)
     
     parser.add_argument("--days", help="Display days of PTO", action="store_true")
     parser.add_argument("-v", "--verbose", help="Enable verbose output", action="store_true")
