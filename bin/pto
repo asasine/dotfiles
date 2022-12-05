@@ -44,23 +44,17 @@ def accumulate_pto(args, datetimes: List[datetime.datetime]):
 
     return accumulated[-1].running_hours
 
-def calculate_biweekly(args):
-    """Calculate the number of two-week periods between args.today and args.date, starting on args.previous_period."""
+def get_biweekly_rrule(args):
+    """Create a recurrence rule for two-week pay periods between args.today and args.date, starting on args.previous_period."""
     print(f"Calculating biweekly from {args.today} to {args.date} with period starting on {args.previous_period}")
     
     # every 2 weeks
     dates = rrule.rrule(rrule.WEEKLY, interval=2, dtstart=args.previous_period, until=args.date)
 
-    # only include occurrences after today
-    dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
+    return dates
 
-    # cache the results
-    dates = list(dates)
-
-    return accumulate_pto(args, dates)
-
-def calculate_bimonthly(args):
-    """Calculate the number of periods between args.today and args.date, starting on args.previous_period, where a period is the 15th and last day of the month."""
+def get_bimonthly_rrule(args):
+    """Create a recurrence rule for pay periods between args.today and args.date, starting on args.previous_period, where a period is the 15th and last day of the month."""
     print(f"Calculating bimonthly from {args.today} to {args.date} with period starting on {args.previous_period}")
 
     dates = rrule.rruleset()
@@ -78,16 +72,10 @@ def calculate_bimonthly(args):
     dates.rrule(rrule.rrule(rrule.MONTHLY, bysetpos=-1, byweekday=(rrule.MO, rrule.TU, rrule.WE, rrule.TH, rrule.FR),
         dtstart=args.previous_period, until=args.date))
 
-    # only include occurrences after today
-    dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
-    
-    # cache the results
-    dates = list(dates)
-    
-    return accumulate_pto(args, dates)
+    return dates
 
-def calculate_annually(args):
-    """Calculate the number of periods between args.today and args.date, starting on args.previous_period, where a period is one year."""
+def get_annually_rrule(args):
+    """Create a recurrence rule for pay periods between args.today and args.date, starting on args.previous_period, where a period is one year."""
     print(f"Calculating annually from {args.today} to {args.date} with period starting on {args.previous_period}")
 
     dates = rrule.rruleset()
@@ -100,6 +88,19 @@ def calculate_annually(args):
     # if the 1st is a weekend, the Monday after must be the 2nd (Sunday, the 1st) or 3rd (Saturday, the 1st)
     dates.rrule(rrule.rrule(rrule.YEARLY, bymonth=1, bymonthday=(2, 3), byweekday=(rrule.MO),
         dtstart=args.previous_period, until=args.date))
+
+    return dates
+
+    
+rrules = {
+    "biweekly": get_biweekly_rrule,
+    "bimonthly": get_bimonthly_rrule,
+    "annually": get_annually_rrule,
+}
+
+def calculate_pto(args):
+    """Calculate the number of periods between args.today and args.date, starting on args.previous_period, given the pay period type args.period."""
+    dates = rrules[args.period](args)
 
     # only include occurrences after today
     dates = dates.xafter(datetime.datetime.now().replace(year=args.today.year, month=args.today.month, day=args.today.day))
@@ -145,11 +146,6 @@ def get_default_previous_period(args) -> datetime.date:
     else:
         return datetime.date.today()
 
-periods = {
-    "biweekly": calculate_biweekly,
-    "bimonthly": calculate_bimonthly,
-    "annually": calculate_annually,
-}
 
 def fromisoformat(date: str) -> datetime.date:
     """
@@ -171,7 +167,7 @@ Accrual periods:
 """
     )
 
-    parser.add_argument("period", help="Length of time where hours are accrued.", choices=periods.keys())
+    parser.add_argument("period", help="Length of time where hours are accrued.", choices=rrules.keys())
     parser.add_argument("rate", help="Number of hours accrued per period", type=float)
     parser.add_argument("date", help="Target date to determine hours accrued", type=fromisoformat)
     parser.add_argument("--current-hours", help="Hours currently accured", type=float, default=0.0)
@@ -194,7 +190,7 @@ Accrual periods:
     if args.verbose:
         print(args)
 
-    pto = periods[args.period](args)
+    pto = calculate_pto(args)
     if args.days:
         pto /= 8.0
 
