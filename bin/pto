@@ -5,7 +5,7 @@ import calendar
 import collections
 import datetime
 import itertools
-from typing import List
+from typing import List, Optional
 from dateutil import relativedelta, rrule
 from rich.console import Console
 from rich.table import Table, Column
@@ -15,22 +15,35 @@ weekdays = list(calendar.day_name)
 InnerAccumulated = collections.namedtuple("InnerAccumulated", ["date", "running_hours"])
 
 
-def accumulate_pto(args, datetimes: List[datetime.datetime]):
+def accumulate_pto(args, datetimes: List[datetime.datetime], rollover_datetimes: Optional[List[datetime.datetime]] = None):
     """
     Calculates the number of accumulated hours of PTO for the given dates.
 
     Args:
         args: The command-line arguments.
         datetimes: A list of datetimes for which to calculate the number of accumulated hours.
+        rollover_datetimes: A List of datetimes for which to perform maximum rollover calculations.
+            None if no rollovers should be performed.
     """
+
+    rollover_dates = list(map(lambda d: d.date(), rollover_datetimes)) if rollover_datetimes is not None else None
 
     def f(current: InnerAccumulated, next_date: datetime.date) -> InnerAccumulated:
         """Calculate the number of accumulated hours for the given date."""
+        # if the current date is before the next rollover date, and the next date is on or after the next rollover date, perform a maximum rollover
+        if rollover_dates and current.date < rollover_dates[0] and next_date >= rollover_dates[0]:
+            # remove this rollover date as it's been handled
+            rollover_date = rollover_dates.pop(0)
+
+            # maximum rollover
+            console.print(f"Maximum rollover on {next_date} from {rollover_date} rollover date.")
+            return InnerAccumulated(next_date, min(args.max_rollover, current.running_hours) + args.rate)
+
         return InnerAccumulated(next_date, current.running_hours + args.rate)
 
     dates = map(lambda d: d.date(), datetimes)
     accumulated = itertools.chain([InnerAccumulated(args.today, args.current_hours)], dates)
-    accumulated = itertools.accumulate(accumulated, f)
+    accumulated = itertools.accumulate(accumulated, f)  # type: ignore
     accumulated = list(accumulated)
     if args.verbose:
         dates_table = Table(
@@ -78,7 +91,7 @@ def get_bimonthly_rrule(args):
 
     return dates
 
-def get_annually_rrule(args):
+def get_annually_rrule(args) -> rrule.rruleset:
     """Create a recurrence rule for pay periods between args.today and args.date, starting on args.previous_period, where a period is one year."""
     dates = rrule.rruleset()
 
@@ -100,7 +113,7 @@ rrules = {
     "annually": get_annually_rrule,
 }
 
-def get_dates_after(rrule: rrule.rrule, today: datetime.date) -> List[datetime.datetime]:
+def get_dates_after(rrule: rrule.rruleset, today: datetime.date) -> List[datetime.datetime]:
     """Get all dates in the recurrence rule after the given date."""
     return list(rrule.xafter(datetime.datetime.now().replace(year=today.year, month=today.month, day=today.day)))
 
@@ -114,9 +127,9 @@ def calculate_pto(args):
     # only include occurrences after today
     dates = get_dates_after(dates, args.today)
 
-    accumulated_pto = accumulate_pto(args, dates)
-
+    # the beginning of each year is also a rollover date, where hours are capped at a maximum args.max_rollover
     new_years = get_dates_after(get_annually_rrule(args), args.today)
+    accumulated_pto = accumulate_pto(args, dates, new_years)
     if len(new_years) > 0:
         additional_hours = args.floating_holidays * 8
         accumulated_pto += additional_hours
@@ -159,6 +172,27 @@ def get_default_previous_period(args) -> datetime.date:
         return candidate
     else:
         return datetime.date.today()
+
+
+def get_default_max_rollover(args) -> Optional[float]:
+    """
+    Gets the maximum number of hours that can be rolled over from the previous period.
+    
+    For bimonthly accrual, this is 24 times the hourly accrual rate.
+    For biweekly accrual, this is 26 times the hourly accrual rate.
+    For annually accrual, this is 2 times the accrual rate times.
+    For all other accrual periods, this is None, meaning infinite rollover is allowed.
+    """
+    if args.max_rollover is not None:
+        return args.max_rollover
+    elif args.period == "bimonthly":
+        return args.rate * 24
+    elif args.period == "biweekly":
+        return args.rate * 26
+    elif args.period == "annually":
+        return args.rate * 2
+    else:
+        return None
 
 
 def fromisoformat(date: str) -> datetime.date:
@@ -219,12 +253,15 @@ Examples:
     parser.add_argument("--floating-holidays", help="Additional days of vacation that accrue instantly on January 1st and do not roll over.",
         default=0, type=int)
 
+    parser.add_argument("--max-rollover", help="The maximum number of hours to roll over into the new year.",
+        type=float, default=None)
+
     parser.add_argument("--days", help="Display days of PTO", action="store_true")
     parser.add_argument("-v", "--verbose", help="Enable verbose output", action="store_true")
 
     args = parser.parse_known_args()[0]
 
-    parser.set_defaults(previous_period=get_default_previous_period(args))
+    parser.set_defaults(previous_period=get_default_previous_period(args), max_rollover=get_default_max_rollover(args))
 
     args = parser.parse_args()
 
