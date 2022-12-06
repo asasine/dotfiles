@@ -178,6 +178,33 @@ Accrual periods:
 - Biweekly accrues every two weeks, starting from the previous Friday by default.
 - Bimonthly accrues twice a month, starting from the previous 15th or last day of the month. If this date is on a weekend, the preceding Friday is used instead.
 - Annually accrues once per year, starting from January 1st. If January 1st is on a weekend, the following Monday is used instead.
+
+Examples:
+
+    Calculate the number of hours accrued at a date in the future:
+
+        pto bimonthly 5.0 2023-04-05
+
+    Calculate total balance given a current balance:
+
+        pto bimonthly 5.0 2023-04-05 --current-hours 42.0
+
+    Use a different accrual type:
+
+        pto annually 92.0 2023-04-05
+
+    Get more accurate results by specifying the end of your previous accrual period:
+
+        pto biweekly 5.0 2023-04-05 --previous-period 2022-11-30
+
+    Include floating holidays into the result. Note: floating holidays are in days, not hours.
+
+        pto biweekly 5.0 2023-04-05 --floating-holidays 2
+
+    Use a different starting date:
+
+        pto biweekly 5.0 2023-04-05 --today 2023-01-01
+
 """
     )
 
