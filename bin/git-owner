@@ -52,6 +52,9 @@ class Ownership:
     score: Score
     """The owner's score."""
 
+    def __rich__(self) -> str:
+        return f"[bright_cyan]{self.score.score: >6.2%}[/bright_cyan] {self.name} ({self.score.numerator}/{self.score.denominator})"
+
 @dataclass(frozen=True)
 class Owners:
     """Owners of a file or directory."""
@@ -336,13 +339,10 @@ Examples:
         emoji = ":file_folder:" if path.is_dir() else ":page_facing_up:"
         return f"{emoji} {path.name if just_name else path}"
     
-    def _owner_renderable(owner: Ownership):
-        return f"[bright_cyan]{owner.score.score: >6.2%}[/bright_cyan] {owner.name}"
-    
     def _path_and_owners_renderables(path: pathlib.Path, owners: Owners, *, just_name: bool = True):
         yield _path_renderable(path, just_name=just_name)
         for owner in owners.top(n=args.number, percentage=args.percentage):
-            yield _owner_renderable(owner)
+            yield owner
     
     if len(owners_by_path) == 1:
         # one file, so we can just print the ownership
@@ -361,7 +361,7 @@ Examples:
     console.print()
     console.print(f"Summary of {args.file}")
     for owner in summarize_directory(args.file, owners_by_path).top(n=args.number, percentage=args.percentage):
-        console.print(_owner_renderable(owner))
+        console.print(owner)
 
     return
 
