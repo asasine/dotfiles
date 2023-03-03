@@ -352,7 +352,7 @@ Examples:
         return
     
     tree = Tree(_path_renderable(args.file, just_name=False))
-    for path, owners in owners_by_path.items():
+    for path, owners in sorted(owners_by_path.items(), key=lambda item: item[0]):
         subtree_group = Group(*_path_and_owners_renderables(path, owners))
         tree.add(subtree_group)
 
