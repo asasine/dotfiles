@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+
+import argparse
+from dataclasses import dataclass, replace
+import pathlib
+import statistics
+import subprocess
+from typing import Dict, Iterable, List, Set
+
+@dataclass(frozen=True)
+class Score:
+    """A score for a file or directory."""
+    numerator: int
+    """The number of owned lines."""
+
+    denominator: int
+    """The number of lines the score is calculated over."""
+
+    path: pathlib.Path
+    """The path to the file or directory."""
+
+    @property
+    def score(self) -> float:
+        """The score of the file or directory."""
+        return self.numerator / self.denominator
+    
+    @classmethod
+    def from_scores(cls, scores: Iterable["Score"], path: pathlib.Path) -> "Score":
+        """Create a score from a list of scores."""
+        numerator = 0
+        denominator = 0
+        for score in scores:
+            numerator += score.numerator
+            denominator += score.denominator
+
+        return Score(numerator, denominator, path)
+    
+
+@dataclass(frozen=True)
+class Ownership:
+    """Ownership of a file or directory."""
+    
+    name: str
+    """The owner's name. This may be a name, email, or username."""
+
+    score: Score
+    """The owner's score."""
+
+def _calculate_owners_file(file: pathlib.Path) -> List[Ownership]:
+    """
+    Calculates the owners of a file.
+
+    The owner of a file is the weighted sum of the owners of the lines in the file (as determined by git-blame).
+
+    Args:
+        file (pathlib.Path): the path to the file.
+
+    Returns:
+        List[Ownership]: the owners of a file.
+    """
+    if not file.is_file():
+        raise ValueError(f"{file} is not a file.")
+    
+    # git blame --line-porcelain -- README.md | sed -n 's/^author //p' | sort | uniq -c
+    try:
+        git_blame_process = subprocess.run(["git", "blame", "--line-porcelain", "--", file], capture_output=True, check=True)
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 128:
+            # git blame returns 128 if the file is not in the repository
+            print(f"Skipping {file}")
+            return []
+        
+    sed_process = subprocess.run(["sed", "-n", "s/^author //p"], input=git_blame_process.stdout, capture_output=True, check=True)
+    sort_process = subprocess.run(["sort"], input=sed_process.stdout, capture_output=True, check=True)
+    uniq_process = subprocess.run(["uniq", "-c"], input=sort_process.stdout, capture_output=True, check=True)
+    sort_process = subprocess.run(["sort", "-rn"], input=uniq_process.stdout, capture_output=True, check=True)
+    
+    # each line is of the form "<number> <name>"
+    def _parse_line(line: bytes) -> Ownership:
+        """
+        Parses a line of the form "<number> <name>" into an Ownership.
+        
+        Args:
+            line (bytes): the line to parse.
+
+        Returns:
+            Ownership: the parsed Ownership. Note: the Score.denominator is not set.
+        """
+        line = line.decode("utf-8").strip()
+        end_number_index = line.find(" ")
+        number = int(line[:end_number_index])
+        name = line[end_number_index + 1:]
+        return Ownership(name, Score(number, 1, file))
+    
+    owners = [_parse_line(line) for line in sort_process.stdout.splitlines()]
+    
+    # calculate the denominator
+    total_lines = sum(owner.score.numerator for owner in owners)
+    return [Ownership(owner.name, replace(Score(owner.score.numerator, total_lines, file), denominator=total_lines)) for owner in owners]
+
+def calculate_owners(path: pathlib.Path) -> List[Ownership]:
+    """
+    Calculates the owners of a file or directory.
+
+    Args:
+        path (pathlib.Path): the path to the file or directory.
+
+    Returns:
+        List[Ownership]: the owners of a file or directory.
+    """
+
+    # use git-ls-files to check for all tracked files at the given path
+    try:
+        git_ls_files_process = subprocess.run(["git", "ls-files", "--error-unmatch", "--", path], capture_output=True, check=True)
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 1:
+            # git ls-files returns 1 if the path is not tracked
+            return []
+        
+        e.add_note(f"git ls-files failed for {path}")
+        raise e
+    
+    # calculate ownership for every tracked file at the given path
+    files = (pathlib.Path(file) for file in git_ls_files_process.stdout.decode("utf-8").splitlines())
+    owners_per_path = [_calculate_owners_file(file) for file in files]
+
+    # each owners list is all owners for the path, so we sum the score for each owner
+    owner_name_to_ownership: Dict[str, Set[Score]] = {}
+    for owners in owners_per_path:
+        for owner in owners:
+            if owner.name not in owner_name_to_ownership:
+                owner_name_to_ownership[owner.name] = set()
+
+            owner_name_to_ownership[owner.name].add(owner.score)
+
+    # each element in owners_per_path represents a single file, so we calcualte the total number of lines as the sum of the denominators for first item in every element of owners_per_path
+    total_lines = 0
+    for owners in owners_per_path:
+        total_lines += 0 if len(owners) == 0 else owners[0].score.denominator
+
+    return [Ownership(name, replace(Score.from_scores(scores, dir), denominator=total_lines)) for name, scores in owner_name_to_ownership.items()]
+
+def main():
+    parser = argparse.ArgumentParser(description="Determine the owner of a file or directory in a git repository.",
+                                     formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     epilog="""
+The owner of a file is the weighted sum of the owners of the lines in the file (as determined by [git-blame](https://git-scm.com/docs/git-blame)). Only tracked files are considered (as determined by [git-ls-files](https://git-scm.com/docs/git-ls-files)).
+
+The owner is determined by author names for each commit. If you wish to consolidate authors, you can use git's gitmailmap functionality to consolidate authors by a single email. https://git-scm.com/docs/gitmailmap
+
+Examples:
+    git-owner README.md
+    git-owner --number 3 README.md
+    git-owner src
+""")
+
+    parser.add_argument("file", help="The file or directory to check", type=pathlib.Path)
+    parser.add_argument("-n", "--number", help="The number of owners to return", type=int)
+    parser.add_argument("--statistics", help="Print statistics", action="store_true")
+
+    args = parser.parse_args()
+
+    print(f"Calculating owners for {args.file}")
+    owners = calculate_owners(args.file)
+    owners.sort(key=lambda owner: owner.score.score, reverse=True)
+
+    if len(owners) == 0:
+        print(f"No owners for {args.file}. Is it tracked in the repository?")
+        return
+    
+    print(args.file)
+    number = len(owners) if args.number is None else args.number
+    for owner in owners[:number]:
+        print(f"{owner.score.score: >6.2%} {owner.name} ({owner.score.numerator}/{owner.score.denominator})")
+
+    if args.statistics:
+        print()
+        print("Statistics")
+        print(f"Total lines: {owners[0].score.denominator}")
+        print(f"Total owners: {len(owners)}")
+        print(f"Mean score per owner: {statistics.mean(owner.score.score for owner in owners):.2%}")
+        print(f"Median score per owner: {statistics.median(owner.score.score for owner in owners):.2%}")
+        print(f"Standard deviation of score per owner: {statistics.stdev(owner.score.score for owner in owners):.2%}")
+
+
+if __name__ == "__main__":
+    main()
