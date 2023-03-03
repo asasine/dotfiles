@@ -2,13 +2,14 @@
 
 import argparse
 from dataclasses import dataclass, replace
+import itertools
 import pathlib
-import statistics
 import subprocess
-from typing import Dict, Iterable, List, Set
+from typing import Dict, Generator, Iterable, List, Set
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.progress import Progress, BarColumn, MofNCompleteColumn, TextColumn
+from rich.tree import Tree
 
 console: Console = Console()
 
@@ -51,7 +52,58 @@ class Ownership:
     score: Score
     """The owner's score."""
 
-def _calculate_owners_file(file: pathlib.Path) -> List[Ownership]:
+@dataclass(frozen=True)
+class Owners:
+    """Owners of a file or directory."""
+    
+    owners: List[Ownership]
+    """The owners of the file or directory."""
+
+    def __post_init__(self):
+        self.owners.sort(key=lambda owner: owner.score.score, reverse=True)
+
+    @property
+    def owner(self) -> str:
+        """The owner of the file or directory."""
+        return self.owners[0].name
+    
+    def top(self, *, n: int = None, percentage: float = None) -> Generator[Ownership, None, None]:
+        """
+        Yields the top owners of the file or directory.
+
+        Args:
+            n (int, optional): the number of owners to yield. Defaults to None.
+            percentage (float, optional): the minimum percentage of ownership to yield. Defaults to None.
+
+        Raises:
+            ValueError: if n and percentage are both specified.
+            ValueError: if percentage is not between 0 and 1.
+
+        Yields:
+            Ownership: the top owners of the file or directory.
+        """
+        if n != None and percentage != None:
+            raise ValueError("n and percentage are mutually exclusive.")
+        
+        if n == None and percentage == None:
+            yield from self.owners
+        
+        if n != None:
+            yield from itertools.islice(self.owners, n)
+        
+        if percentage != None:
+            if percentage < 0 or percentage > 1:
+                raise ValueError("percentage must be between 0 and 1.")
+            
+            total_percentage = 0.0
+            for owner in self.owners:
+                total_percentage += owner.score.score
+                yield owner
+                if total_percentage >= percentage:
+                    break
+
+
+def _calculate_owners_file(file: pathlib.Path) -> Owners:
     """
     Calculates the owners of a file.
 
@@ -61,7 +113,7 @@ def _calculate_owners_file(file: pathlib.Path) -> List[Ownership]:
         file (pathlib.Path): the path to the file.
 
     Returns:
-        List[Ownership]: the owners of a file.
+        Owners: the owners of a file.
     """
     if not file.is_file():
         raise ValueError(f"'{file}' is not a file.")
@@ -101,43 +153,122 @@ def _calculate_owners_file(file: pathlib.Path) -> List[Ownership]:
     
     # calculate the denominator
     total_lines = sum(owner.score.numerator for owner in owners)
-    return [Ownership(owner.name, replace(Score(owner.score.numerator, total_lines, file), denominator=total_lines)) for owner in owners]
+    return Owners([Ownership(owner.name, replace(Score(owner.score.numerator, total_lines, file), denominator=total_lines)) for owner in owners])
 
-def calculate_owners(path: pathlib.Path) -> List[Ownership]:
+def _get_tracked_files(path: pathlib.Path) -> List[pathlib.Path]:
     """
-    Calculates the owners of a file or directory.
+    Gets all tracked files at the given path using git ls-files.
+
+    Args:
+        path (pathlib.Path): the path to the file or directory.
+
+    Raises:
+        e: if git ls-files fails.
+
+    Returns:
+        List[pathlib.Path]: the tracked files at the given path.
+    """
+    try:
+        git_ls_files_process = subprocess.run(["git", "ls-files", "--format='%(objectmode) %(path)'", "--error-unmatch", "--", path], capture_output=True, check=True)
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 1:
+            # git ls-files returns 1 if the path is not tracked
+            return []
+        
+        e.add_note(f"git ls-files failed for {path}")
+        raise e
+    
+    # calculate ownership for every tracked file at the given path
+    lines = git_ls_files_process.stdout.decode("utf-8").splitlines()
+
+    # each line is of the form "'<objectmode> <path>'" so we remove the single quotes
+    lines = map(lambda line: line[1:-1], lines)
+
+    # only consider regular files (objectmode 10xxxx)
+    lines = filter(lambda line: line.startswith("10"), lines)
+    files = (pathlib.Path(line[7:]) for line in lines)
+    return list(files)
+
+def _is_path_relative_to(path: pathlib.Path, directory: pathlib.Path) -> bool:
+    """
+    Checks if the path is relative to the directory.
+
+    Args:
+        path (pathlib.Path): the path to check.
+        directory (pathlib.Path): the directory to check if the path is relative to.
+
+    Returns:
+        bool: True if the path is relative to the directory, False otherwise.
+    """
+    try:
+        path.relative_to(directory)
+        return True
+    except ValueError:
+        return False
+
+def summarize_directory(directory: pathlib.Path, path_to_owners: Dict[pathlib.Path, Owners]) -> Owners:
+    """
+    Summarize the owners of a directory.
+
+    Args:
+        directory (pathlib.Path): the directory to summarize.
+        path_to_owners (Dict[pathlib.Path, List[Ownership]]): the owners of each file in the directory.
+
+    Returns:
+        Owners: the owners of the directory.
+    """
+    if len(path_to_owners) == 0:
+        return Owners([])
+    
+    # check that all paths are in the same directory
+    if not all(_is_path_relative_to(path, directory) for path in path_to_owners.keys()):
+        paths_not_in_directory = {path for path in path_to_owners.keys() if not _is_path_relative_to(path, directory)}
+        raise ValueError(f"All paths must be in the same directory: {{ {paths_not_in_directory} }} aren't in directory {directory}")
+    
+    # calculate total number of lines across all files
+    total_lines = 0
+    for owners in path_to_owners.values():
+        total_lines += 0 if len(owners.owners) == 0 else owners.owners[0].score.denominator
+
+    # calculate the total score for each owner
+    owner_name_to_ownership: Dict[str, Set[Score]] = {}
+    for owners in path_to_owners.values():
+        for owner in owners.owners:
+            if owner.name not in owner_name_to_ownership:
+                owner_name_to_ownership[owner.name] = set()
+
+            owner_name_to_ownership[owner.name].add(owner.score)
+    
+    return Owners([Ownership(name, replace(Score.from_scores(scores, dir), denominator=total_lines)) for name, scores in owner_name_to_ownership.items()])
+
+
+def calculate_owners(path: pathlib.Path) -> Dict[pathlib.Path, Owners]:
+    """
+    Calculates the owners of a file or directory. If the path is a directory, the owners of every file in the directory are calculated.
 
     Args:
         path (pathlib.Path): the path to the file or directory.
 
     Returns:
-        List[Ownership]: the owners of a file or directory.
+        Dict[pathlib.Path, Owners]: the owners of the file or directory.
     """
 
+    tracked_files = _get_tracked_files(path)
+    if len(tracked_files) == 0:
+        return {}
+    
+    if len(tracked_files) == 1:
+        # one file, so we can just calculate the ownership
+        return {tracked_files[0]: _calculate_owners_file(tracked_files[0])}
+    
+    # multiple files, meaning path must be a directory, so we calculate the ownership for each file in that directory
+    if not path.is_dir():
+        raise ValueError(f"'{path}' is not a directory.")
+    
+    num_files = len(tracked_files)
+    tracked_files_by_subpath = {subpath: _get_tracked_files(subpath) for subpath in path.iterdir()}
     with Progress(BarColumn(), MofNCompleteColumn(), TextColumn("[progress.description]{task.description}"), console=console, transient=True) as progress:
-        task = progress.add_task(str(path), total=None)
-
-        # use git-ls-files to check for all tracked files at the given path
-        try:
-            git_ls_files_process = subprocess.run(["git", "ls-files", "--format='%(objectmode) %(path)'", "--error-unmatch", "--", path], capture_output=True, check=True)
-        except subprocess.CalledProcessError as e:
-            if e.returncode == 1:
-                # git ls-files returns 1 if the path is not tracked
-                return []
-            
-            e.add_note(f"git ls-files failed for {path}")
-            raise e
-        
-        # calculate ownership for every tracked file at the given path
-        lines = git_ls_files_process.stdout.decode("utf-8").splitlines()
-        progress.update(task, total=len(lines))
-
-        # each line is of the form "'<objectmode> <path>'" so we remove the single quotes
-        lines = map(lambda line: line[1:-1], lines)
-
-        # only consider regular files (objectmode 10xxxx)
-        lines = filter(lambda line: line.startswith("10"), lines)
-        files = (pathlib.Path(line[7:]) for line in lines)
+        task = progress.add_task(str(path), total=num_files)
 
         def _step(file):
             progress.update(task, description=str(file))
@@ -145,24 +276,20 @@ def calculate_owners(path: pathlib.Path) -> List[Ownership]:
             progress.advance(task)
             return owners
         
-        owners_per_path = map(_step, files)
-        owners_per_path = list(owners_per_path)
+        owners_by_subpath: Dict[pathlib.Path, Owners] = {}
+        for subpath, tracked_files in tracked_files_by_subpath.items():
+            if len(tracked_files) == 0:
+                # the subpath is not tracked, so we skip it
+                continue
 
-        # each owners list is all owners for the path, so we sum the score for each owner
-        owner_name_to_ownership: Dict[str, Set[Score]] = {}
-        for owners in owners_per_path:
-            for owner in owners:
-                if owner.name not in owner_name_to_ownership:
-                    owner_name_to_ownership[owner.name] = set()
+            if len(tracked_files) == 1 and tracked_files[0] == subpath:
+                # the subpath is itself a tracked file, so we can just calculate the ownership
+                owners_by_subpath[subpath] = _step(subpath)
+            else:
+                # the subpath is a directory, so we calculate the ownership for each file in that directory, and then summarize the ownership
+                owners_by_subpath[subpath] = summarize_directory(subpath, {file: _step(file) for file in tracked_files})
 
-                owner_name_to_ownership[owner.name].add(owner.score)
-
-        # each element in owners_per_path represents a single file, so we calcualte the total number of lines as the sum of the denominators for first item in every element of owners_per_path
-        total_lines = 0
-        for owners in owners_per_path:
-            total_lines += 0 if len(owners) == 0 else owners[0].score.denominator
-
-        return [Ownership(name, replace(Score.from_scores(scores, dir), denominator=total_lines)) for name, scores in owner_name_to_ownership.items()]
+        return owners_by_subpath
 
 def main():
     parser = argparse.ArgumentParser(description="Determine the owner of a file or directory in a git repository.",
@@ -180,50 +307,63 @@ Examples:
 
     parser.add_argument("file", help="The file or directory to check", type=pathlib.Path)
 
+    def _percentage_float(value: str) -> float:
+        try:
+            percentage = float(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{value} is not a valid percentage.")
+        
+        if percentage < 0 or percentage > 1:
+            raise argparse.ArgumentTypeError(f"{value} is not a valid percentage.")
+        
+        return percentage
+
     limiting_group = parser.add_mutually_exclusive_group()
     limiting_group.add_argument("-n", "--number", help="The number of owners to return", type=int)
-    limiting_group.add_argument("--percentage", help="The percentage of ownership to return", type=float)
+    limiting_group.add_argument("--percentage", help="The percentage of ownership to return", type=_percentage_float)
 
     parser.add_argument("--statistics", help="print statistics", action="store_true")
 
     args = parser.parse_args()
 
-    owners = calculate_owners(args.file)
-    owners.sort(key=lambda owner: owner.score.score, reverse=True)
+    owners_by_path = calculate_owners(args.file)
 
-    if len(owners) == 0:
+    if len(owners_by_path) == 0:
         console.print(f"No owners for {args.file}. Is it tracked in the repository?")
         return
     
-    console.print(args.file)
-    if args.number == None and args.percentage == None:
-        percentage = 1.0
-    elif args.number != None:
-        percentage = sum(owner.score.score for owner in owners[:args.number])
-    elif args.percentage != None:
-        percentage = args.percentage
+    def _path_renderable(path: pathlib.Path, *, just_name: bool = True):
+        emoji = ":file_folder:" if path.is_dir() else ":page_facing_up:"
+        return f"{emoji} {path.name if just_name else path}"
     
-    total_percentage = 0.0
-    for owner in owners:
-        if args.statistics:
-            console.print(f"{owner.score.score: >6.2%} {owner.name} ({owner.score.numerator}/{owner.score.denominator})")
-        else:
-            console.print(f"{owner.score.score: >6.2%} {owner.name}")
-        
-        total_percentage += owner.score.score
-        if total_percentage >= percentage:
-            break
+    def _owner_renderable(owner: Ownership):
+        return f"[bright_cyan]{owner.score.score: >6.2%}[/bright_cyan] {owner.name}"
+    
+    def _path_and_owners_renderables(path: pathlib.Path, owners: Owners, *, just_name: bool = True):
+        yield _path_renderable(path, just_name=just_name)
+        for owner in owners.top(n=args.number, percentage=args.percentage):
+            yield _owner_renderable(owner)
+    
+    if len(owners_by_path) == 1:
+        # one file, so we can just print the ownership
+        for renderable in _path_and_owners_renderables(args.file, owners_by_path[args.file], just_name=False):
+            console.print(renderable)
 
-    if args.statistics:
-        console.print()
-        console.print("Statistics")
-        console.print(f"Total lines: {owners[0].score.denominator}")
-        console.print(f"Total owners: {len(owners)}")
-        console.print(f"Mean score per owner: {statistics.mean(owner.score.score for owner in owners):.2%}")
-        console.print(f"Median score per owner: {statistics.median(owner.score.score for owner in owners):.2%}")
-        console.print(f"Standard deviation of score per owner: {statistics.stdev(owner.score.score for owner in owners):.2%}")
+        return
+    
+    tree = Tree(_path_renderable(args.file, just_name=False))
+    for path, owners in owners_by_path.items():
+        subtree_group = Group(*_path_and_owners_renderables(path, owners))
+        tree.add(subtree_group)
 
-    console.bell()
+    console.print(tree)
+
+    console.print()
+    console.print(f"Summary of {args.file}")
+    for owner in summarize_directory(args.file, owners_by_path).top(n=args.number, percentage=args.percentage):
+        console.print(_owner_renderable(owner))
+
+    return
 
 
 if __name__ == "__main__":
