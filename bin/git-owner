@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
 import argparse
+import csv
 from dataclasses import dataclass, replace
 import itertools
 import pathlib
 import subprocess
+import sys
 from typing import Dict, Generator, Iterable, List, Set
 
 from rich.console import Console, Group
 from rich.progress import Progress, BarColumn, MofNCompleteColumn, TextColumn
 from rich.tree import Tree
 
-console: Console = Console()
+console: Console = Console(stderr=True)
 
 @dataclass(frozen=True)
 class Score:
@@ -293,6 +295,44 @@ def calculate_owners(path: pathlib.Path) -> Dict[pathlib.Path, Owners]:
                 owners_by_subpath[subpath] = summarize_directory(subpath, {file: _step(file) for file in tracked_files})
 
         return owners_by_subpath
+    
+def _output_pretty(owners_by_path: Dict[pathlib.Path, Owners], args: argparse.Namespace):
+    def _path_renderable(path: pathlib.Path, *, just_name: bool = True):
+        emoji = ":file_folder:" if path.is_dir() else ":page_facing_up:"
+        return f"{emoji} {path.name if just_name else path}"
+    
+    def _path_and_owners_renderables(path: pathlib.Path, owners: Owners, *, just_name: bool = True):
+        yield _path_renderable(path, just_name=just_name)
+        for owner in owners.top(n=args.number, percentage=args.percentage):
+            yield owner
+    
+    if len(owners_by_path) == 1:
+        # one file, so we can just print the ownership
+        for renderable in _path_and_owners_renderables(args.file, owners_by_path[args.file], just_name=False):
+            console.print(renderable)
+
+        return
+    
+    tree = Tree(_path_renderable(args.file, just_name=False))
+    for path, owners in sorted(owners_by_path.items(), key=lambda item: item[0]):
+        subtree_group = Group(*_path_and_owners_renderables(path, owners))
+        tree.add(subtree_group)
+
+    console.print(tree)
+
+    console.print()
+    console.print(f"Summary of {args.file}")
+    for owner in summarize_directory(args.file, owners_by_path).top(n=args.number, percentage=args.percentage):
+        console.print(owner)
+
+def _output_csv(owners_by_path: Dict[pathlib.Path, Owners], args: argparse.Namespace):
+    writer = csv.writer(sys.stdout)
+    if not args.no_header:
+        writer.writerow(["path", "owner", "score"])
+
+    for path, owners in owners_by_path.items():
+        for owner in owners.top(n=args.number, percentage=args.percentage):
+            writer.writerow([path, owner.name, owner.score.score])
 
 def main():
     parser = argparse.ArgumentParser(description="Determine the owner of a file or directory in a git repository.",
@@ -325,7 +365,8 @@ Examples:
     limiting_group.add_argument("-n", "--number", help="The number of owners to return", type=int)
     limiting_group.add_argument("--percentage", help="The percentage of ownership to return", type=_percentage_float)
 
-    parser.add_argument("--statistics", help="print statistics", action="store_true")
+    parser.add_argument("--output", help="The output format", choices=["pretty", "csv"], default="pretty")
+    parser.add_argument("--no-header", help="Do not print a header for the CSV output. Ignored if output is not csv.", action="store_true")
 
     args = parser.parse_args()
 
@@ -334,34 +375,11 @@ Examples:
     if len(owners_by_path) == 0:
         console.print(f"No owners for {args.file}. Is it tracked in the repository?")
         return
-    
-    def _path_renderable(path: pathlib.Path, *, just_name: bool = True):
-        emoji = ":file_folder:" if path.is_dir() else ":page_facing_up:"
-        return f"{emoji} {path.name if just_name else path}"
-    
-    def _path_and_owners_renderables(path: pathlib.Path, owners: Owners, *, just_name: bool = True):
-        yield _path_renderable(path, just_name=just_name)
-        for owner in owners.top(n=args.number, percentage=args.percentage):
-            yield owner
-    
-    if len(owners_by_path) == 1:
-        # one file, so we can just print the ownership
-        for renderable in _path_and_owners_renderables(args.file, owners_by_path[args.file], just_name=False):
-            console.print(renderable)
 
-        return
-    
-    tree = Tree(_path_renderable(args.file, just_name=False))
-    for path, owners in sorted(owners_by_path.items(), key=lambda item: item[0]):
-        subtree_group = Group(*_path_and_owners_renderables(path, owners))
-        tree.add(subtree_group)
-
-    console.print(tree)
-
-    console.print()
-    console.print(f"Summary of {args.file}")
-    for owner in summarize_directory(args.file, owners_by_path).top(n=args.number, percentage=args.percentage):
-        console.print(owner)
+    if args.output == "pretty":
+        _output_pretty(owners_by_path, args)
+    elif args.output == "csv":
+        _output_csv(owners_by_path, args)
 
     return
 
