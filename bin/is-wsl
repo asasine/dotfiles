@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+if [[ -f /proc/version && $(cat /proc/sys/kernel/osrelease) =~ [Mm]icrosoft ]]; then
+  exit 0
+else
+  exit 1
+fi
