@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+
+import click
+import math
+import os
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Union
+
+
+def get_state_dir(problem: Optional[str] = None):
+    """
+    Gets the state directory for bisect.
+
+    This directory will be created if it does not exist before returning.
+
+    Args:
+        problem (Optional[str]): The problem to get the state directory for, or None for the default state directory.
+
+    Returns:
+        Path: The path to the state directory.
+    """
+    state_dir: Union[Optional[str], Path] = os.environ.get(
+        "XDG_STATE_HOME", None)
+    if state_dir is not None:
+        state_dir = Path(state_dir)
+    else:
+        state_dir = Path.home() / ".local" / "state"
+
+    state_dir /= "bisect"
+    if problem is not None:
+        state_dir /= problem
+
+    return state_dir
+
+
+def read_number_file(state_dir: Path, name: str) -> Optional[int]:
+    """
+    Reads a number from a file.
+
+    Args:
+        state_dir (Path): The path to the state directory to read.
+        name (str): The name of the file to read.
+
+    Returns:
+        Optional[int]: The number read from the file, or None if the file does not exist.
+    """
+    path = state_dir / name
+    if not path.exists():
+        return None
+
+    return int(path.read_text())
+
+
+def write_number_file(state_dir: Path, name: str, number: int):
+    """
+    Writes a number to a file.
+
+    Args:
+        state_dir (Path): The path to the state directory to write.
+        name (str): The name of the file to write.
+        number (int): The number to write to the file.
+    """
+    path = state_dir / name
+    path.write_text(str(number))
+
+
+@dataclass
+class State:
+    bad: int
+    good: int
+
+    @property
+    def guess(self) -> int:
+        return int((self.bad + self.good) / 2)
+
+    @property
+    def possiblities(self) -> int:
+        return abs(int(self.bad - self.good))
+
+    def possiblities_repr(self) -> str:
+        return f"{self.possiblities} possibilit{'ies' if self.possiblities != 1 else 'y'}"
+
+    @property
+    def steps_remaining(self) -> int:
+        return math.ceil(math.log2(self.possiblities))
+
+    def steps_remaining_repr(self) -> str:
+        return f"{self.steps_remaining} step{'s' if self.steps_remaining != 1 else ''}"
+
+    def __repr__(self):
+        return f"State(bad={self.bad}, good={self.good}, guess={self.guess}, possiblities={self.possiblities}, steps_remaining={self.steps_remaining})"
+
+    def short_repr(self):
+        return f"({self.bad} {{{self.guess}}} {self.good}]"
+
+    def guess_repr(self):
+        return f"Guess: {self.guess} ({self.possiblities_repr()}, {self.steps_remaining_repr()})"
+
+
+def get_state(state_dir: Path) -> State:
+    """
+    Gets the problem state.
+
+    Args:
+        state_dir (Path): The path to the state directory to read.
+
+    Returns:
+        State: The current problem state.
+
+    Raises:
+        ValueError: If the state directory does not exist.
+        ValueError: If the bad or good values are not set.
+    """
+    if not state_dir.exists():
+        raise ValueError("Problem not initialized.")
+
+    bad = read_number_file(state_dir, "bad")
+    if bad is None:
+        raise ValueError("Bad value not set.")
+
+    good = read_number_file(state_dir, "good")
+    if good is None:
+        raise ValueError("Good value not set.")
+
+    return State(bad=bad, good=good)
+
+
+pass_state_dir = click.make_pass_decorator(Path)
+
+
+def list_problems(ctx: click.Context, param: click.Parameter, value: bool):
+    if not value or ctx.resilient_parsing:
+        return
+
+    state_dir = get_state_dir()
+    if not state_dir.exists():
+        click.echo("No problems.")
+        ctx.exit()
+
+    problems = (problem for problem in state_dir.iterdir() if problem.is_dir())
+    first = True
+    for problem in problems:
+        if first:
+            first = False
+            click.echo("Problems:")
+
+        description = None
+        try:
+            state = get_state(problem)
+            description = state.short_repr()
+        except ValueError:
+            description = "(uninitialized)"
+
+        click.echo(f"\t{problem.name} {description} ({problem})")
+
+    if first:
+        click.echo("No problems.")
+        ctx.exit()
+
+    ctx.exit()
+
+
+@click.group(invoke_without_command=True)
+@click.pass_context
+@click.option("--list", is_flag=True, help="List all problems.", callback=list_problems, expose_value=False, is_eager=True)
+@click.argument("problem")
+def cli(ctx: click.Context, problem: str):
+    """Bisect is a tool for binary searching numbers to solve a PROBLEM."""
+    if ctx.obj is None:
+        # ctx.obj might not be None if this command is invoked as a subcommand.
+        ctx.obj = get_state_dir(problem)
+
+    if ctx.invoked_subcommand is not None:
+        # a subcommand was given; return so it can be invoked.
+        return
+
+    if not ctx.obj.exists():
+        click.echo(f"PROBLEM {problem} does not exist.", err=True)
+        return
+
+    # No subcommand was invoked; print the state.
+    try:
+        state = get_state(ctx.obj)
+        click.echo(state)
+    except ValueError as e:
+        click.echo(e, err=True)
+        return
+
+
+@cli.command()
+@click.pass_context
+@click.argument("bad", type=int, required=False)
+@click.argument("good", type=int, required=False)
+def init(ctx: click.Context, bad: Optional[int], good: Optional[int]):
+    state_dir: Path = ctx.obj
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    if good is not None:
+        write_number_file(state_dir, "good", good)
+
+    if bad is not None:
+        write_number_file(state_dir, "bad", bad)
+
+    if bad is None and good is None:
+        return
+
+    if click.prompt("Run?", default=True, show_default=True):
+        ctx.invoke(run)
+    else:
+        click.echo("Not running interactively, but here's the next value.")
+        ctx.invoke(next)
+
+
+@cli.command()
+@click.pass_context
+@click.argument("bad", type=int, required=False)
+def bad(ctx: click.Context, bad: Optional[int]) -> bool:
+    state_dir: Path = ctx.obj
+    if bad is None:
+        # whatever the current guess is is bad
+        try:
+            bad = read_number_file(state_dir, "guess")
+        except ValueError as e:
+            click.echo(e, err=True)
+            return True
+
+        if bad is None:
+            click.echo("No guess set.", err=True)
+            return True
+        else:
+            click.echo(f"Automatically setting bad to {bad}")
+
+    write_number_file(state_dir, "bad", bad)
+    return ctx.invoke(next)
+
+
+@cli.command()
+@click.pass_context
+@click.argument("good", type=int, required=False)
+def good(ctx: click.Context, good: Optional[int]) -> bool:
+    state_dir: Path = ctx.obj
+    if good is None:
+        # whatever the current guess is is good
+        try:
+            good = read_number_file(state_dir, "guess")
+        except ValueError as e:
+            click.echo(e, err=True)
+            return True
+
+        if good is None:
+            click.echo("No guess set.", err=True)
+            return True
+        else:
+            click.echo(f"Automatically setting good to {good}")
+
+    write_number_file(state_dir, "good", good)
+    return ctx.invoke(next)
+
+
+@cli.command()
+@pass_state_dir
+def next(state_dir: Path):
+    try:
+        state = get_state(state_dir)
+    except ValueError as e:
+        click.echo(e, err=True)
+        return True
+
+    if state.steps_remaining == 0:
+        click.echo(f"{state.good} is the first good value.")
+        return True
+
+    guess = state.guess
+    write_number_file(state_dir, "guess", guess)
+    click.echo(state.guess_repr())
+    return False
+
+
+@cli.command()
+@click.pass_context
+def run(ctx: click.Context):
+    if ctx.invoke(next):
+        return
+
+    done = False
+    while not done:
+        guess = read_number_file(ctx.obj, "guess")
+        is_good = click.prompt("Good?", type=bool)
+        if is_good:
+            done = ctx.invoke(good, good=guess)
+        else:
+            done = ctx.invoke(bad, bad=guess)
+
+
+@cli.command()
+@pass_state_dir
+def rm(state_dir: Path):
+    click.echo(f"Removing problem directory {state_dir}")
+    shutil.rmtree(state_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    cli()
