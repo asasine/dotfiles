@@ -3,7 +3,7 @@
 
 [alias]
 	ancestor = show-branch --merge-base
-	alias = config --get-regexp '^alias\\..'
+	alias = config get --all --show-names --show-scope --regexp '^alias\\.'
 	fixup = commit --amend --no-edit --no-verify --allow-empty
 	wip = !git add -A && git commit -m \"WIP\"
 	fire = !git stash -u && git checkout -b fire/$USER/$(date -u +%Y-%m-%dT%H-%M-%SZ) && git stash pop && git wip && git push --set-upstream $(git remote) $(git branch --show-current)
@@ -14,16 +14,16 @@
 
 	log-ns = log --name-status
 	dog = log --decorate --oneline --graph
-	adog = !git dog --all
-	graph = !git lg1
+	adog = dog --all
+	graph = lg1
 
-	lg1 = !git lg1-specific
-	lg2 = !git lg2-specific
-	lg3 = !git lg3-specific
+	lg1 = lg1-specific
+	lg2 = lg2-specific
+	lg3 = lg3-specific
 
-	lg1-all = !git lg1-specific --all
-	lg2-all = !git lg2-specific --all
-	lg3-all = !git lg3-specific --all
+	lg1-all = lg1-specific --all
+	lg2-all = lg2-specific --all
+	lg3-all = lg3-specific --all
 
 	lg1-specific = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)'
 	lg2-specific = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) %C(bold green)(%ar)%C(reset)%C(auto)%d%C(reset)%n''          %C(white)%s%C(reset) %C(dim white)- %an%C(reset)'
