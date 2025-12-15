@@ -5,9 +5,9 @@ My personal collection of dotfiles and scripts.
 1. Clone the repo
 1. Install by running:
 
-    ```bash
-    ./install.bash
-    ````
+    - Windows: `.\install.ps1`
+    - Linux: `./install.bash`
+
 1. Restart your shell
 
 ## Thanks
