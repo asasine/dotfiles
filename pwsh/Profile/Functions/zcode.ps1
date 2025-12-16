@@ -1,6 +1,7 @@
 function global:zcode {
     param (
-        [string]$path
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$path
     )
 
     $queried = zoxide query $path
