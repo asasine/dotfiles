@@ -10,8 +10,8 @@
 	fire = !git stash -u && git checkout -b fire/$USER/$(date -u +%Y-%m-%dT%H-%M-%SZ) && git stash pop && git wip && git push --set-upstream $(git remote) $(git branch --show-current)
 	stat = diff --stat
 	pusho = !git push --set-upstream origin $(git branch --show-current)
-	resetho = !git reset --hard origin/$(git branch --show-current)
-	fresetho = !git fetch && git resetho
+	resethu = !git reset --hard $(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')
+	fresethu = !git fetch && git resethu
 
 	log-ns = log --name-status
 	dog = log --decorate --oneline --graph
@@ -47,3 +47,6 @@
 
 [init]
 	defaultBranch = main
+[credential "azrepos:org/MSFTDEVICES"]
+	azureAuthority = https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47
+	username = adsasine@microsoft.com
