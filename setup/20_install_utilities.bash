@@ -4,3 +4,5 @@ if ! is-macos;
 then
     sudo apt-get install -y colorized-logs
 fi
+
+cargo install --locked spongebob ripgrep
