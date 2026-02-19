@@ -80,10 +80,6 @@ done
 unset READLINK CURRENT_SCRIPT SCRIPT_PATH DOTFILE SYSTEM_DOTFILE LOCAL_DOTFILE
 export DOTFILES_DIR
 
-if [ -f "$HOME/.cargo/env" ]; then
-  source "$HOME/.cargo/env"
-fi
-
 if is-macos;
 then
   if type brew &>/dev/null; then
