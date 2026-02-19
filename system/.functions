@@ -6,3 +6,10 @@ path_prepend_idempotent() {
         PATH="$1${PATH:+":$PATH"}" # prepend $1 or if $PATH is empty set to $1
     fi
 }
+
+update-repo() {
+    for source in "$@"; do
+        sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/${source}" \
+        -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"    
+    done
+}
