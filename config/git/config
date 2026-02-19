@@ -1,5 +1,6 @@
 [user]
 	name = Adam Sasine
+	email = asasine@users.noreply.github.com
 
 [alias]
 	ancestor = show-branch --merge-base
