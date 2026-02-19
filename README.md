@@ -15,4 +15,4 @@ Thanks to the following repositories for inspiration and help
 - https://github.com/webpro/dotfiles
 
 ## TODO
-- Use GNU Stow to manage symlinks http://brandon.invergo.net/news/2012-05-26-using-gnu-stow-to-manage-your-dotfiles.html
+- Use deb package for Debian systems?
