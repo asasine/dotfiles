@@ -10,6 +10,6 @@ path_prepend_idempotent() {
 update-repo() {
     for source in "$@"; do
         sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/${source}" \
-        -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"    
+        -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
     done
 }
