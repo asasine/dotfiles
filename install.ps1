@@ -52,3 +52,5 @@ if (Get-Command cargo -ErrorAction SilentlyContinue) {
 } else {
     Write-Warning "cargo not found, skipping Rust package installs. Install Rust and cargo and rerun this script to install Rust packages."
 }
+
+sudo pwsh -NoProfile -Command 'PowerShellGet\Install-Module posh-git -Repository PSGallery -Force'
