@@ -1,12 +1,11 @@
 $destination = Split-Path -Parent $PROFILE.CurrentUserAllHosts
-New-Item -Path $destination\Profile -ItemType SymbolicLink -Value $PSScriptRoot\pwsh\Profile -Force
-New-Item -Path $PROFILE.CurrentUserAllHosts -ItemType SymbolicLink -Value $PSScriptRoot\pwsh\profile.ps1 -Force
 
-# make .config dir and symlink config directories
-New-Item -Path $HOME\.config -ItemType Directory -Force
-$config_dirs = Get-ChildItem -Path $PSScriptRoot\config -Directory
-foreach ($dir in $config_dirs) {
-    $source = Join-Path -Path $PSScriptRoot\config -ChildPath $dir.Name
-    $target = Join-Path -Path $HOME\.config -ChildPath $dir.Name
-    New-Item -Path $target -ItemType SymbolicLink -Value $source -Force
-}
+# The destination is probably in OneDrive, so symlinks don't work as expected.
+# Instead, we need to just recursively copy the profile directory to the destination.
+Copy-Item -Path $PSScriptRoot\pwsh\profile -Destination $destination -Recurse -Force
+Copy-Item -Path $PSScriptRoot\pwsh\profile.ps1 -Destination $destination -Force
+
+# symlink ~/.config to the dotfiles config directory
+Write-Host "Creating symbolic link for ~/.config to $PSScriptRoot\config."
+Write-Host "This requires administrator privileges, so you may be prompted to approve sudo."
+sudo pwsh -NoProfile -Command "New-Item -Path $HOME\.config -ItemType SymbolicLink -Value $PSScriptRoot\config"
