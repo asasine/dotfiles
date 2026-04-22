@@ -56,9 +56,11 @@ Register-ArgumentCompleter -Native -CommandName 'rustup' -ScriptBlock {
             [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Comma-separated list of targets to be added on installation')
             [CompletionResult]::new('--target', '--target', [CompletionResultType]::ParameterName, 'Comma-separated list of targets to be added on installation')
             [CompletionResult]::new('--no-self-update', '--no-self-update', [CompletionResultType]::ParameterName, 'Don''t perform self update when running the `rustup toolchain install` command')
+            [CompletionResult]::new('--no-update', '--no-update', [CompletionResultType]::ParameterName, 'Don''t try to update the installed toolchain')
             [CompletionResult]::new('--force', '--force', [CompletionResultType]::ParameterName, 'Force an update, even if some components are missing')
             [CompletionResult]::new('--allow-downgrade', '--allow-downgrade', [CompletionResultType]::ParameterName, 'Allow rustup to downgrade the toolchain to satisfy your component choice')
             [CompletionResult]::new('--force-non-host', '--force-non-host', [CompletionResultType]::ParameterName, 'Install toolchains that require an emulator. See https://github.com/rust-lang/rustup/wiki/Non-host-toolchains')
+            [CompletionResult]::new('--override', '--override', [CompletionResultType]::ParameterName, 'Set the installed toolchain as the override for the current directory')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -99,9 +101,11 @@ Register-ArgumentCompleter -Native -CommandName 'rustup' -ScriptBlock {
             [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Comma-separated list of targets to be added on installation')
             [CompletionResult]::new('--target', '--target', [CompletionResultType]::ParameterName, 'Comma-separated list of targets to be added on installation')
             [CompletionResult]::new('--no-self-update', '--no-self-update', [CompletionResultType]::ParameterName, 'Don''t perform self update when running the `rustup toolchain install` command')
+            [CompletionResult]::new('--no-update', '--no-update', [CompletionResultType]::ParameterName, 'Don''t try to update the installed toolchain')
             [CompletionResult]::new('--force', '--force', [CompletionResultType]::ParameterName, 'Force an update, even if some components are missing')
             [CompletionResult]::new('--allow-downgrade', '--allow-downgrade', [CompletionResultType]::ParameterName, 'Allow rustup to downgrade the toolchain to satisfy your component choice')
             [CompletionResult]::new('--force-non-host', '--force-non-host', [CompletionResultType]::ParameterName, 'Install toolchains that require an emulator. See https://github.com/rust-lang/rustup/wiki/Non-host-toolchains')
+            [CompletionResult]::new('--override', '--override', [CompletionResultType]::ParameterName, 'Set the installed toolchain as the override for the current directory')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -201,6 +205,7 @@ Register-ArgumentCompleter -Native -CommandName 'rustup' -ScriptBlock {
             break
         }
         'rustup;check' {
+            [CompletionResult]::new('--no-self-update', '--no-self-update', [CompletionResultType]::ParameterName, 'Don''t check for self update when running the `rustup check` command')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -377,8 +382,10 @@ Register-ArgumentCompleter -Native -CommandName 'rustup' -ScriptBlock {
             [CompletionResult]::new('--nomicon', '--nomicon', [CompletionResultType]::ParameterName, 'The Dark Arts of Advanced and Unsafe Rust Programming')
             [CompletionResult]::new('--proc_macro', '--proc_macro', [CompletionResultType]::ParameterName, 'A support library for macro authors when defining new macros')
             [CompletionResult]::new('--reference', '--reference', [CompletionResultType]::ParameterName, 'The Rust Reference')
+            [CompletionResult]::new('--releases', '--releases', [CompletionResultType]::ParameterName, 'Rust Release Notes')
             [CompletionResult]::new('--rust-by-example', '--rust-by-example', [CompletionResultType]::ParameterName, 'A collection of runnable examples that illustrate various Rust concepts and standard libraries')
             [CompletionResult]::new('--rustc', '--rustc', [CompletionResultType]::ParameterName, 'The compiler for the Rust programming language')
+            [CompletionResult]::new('--rustc-docs', '--rustc-docs', [CompletionResultType]::ParameterName, 'The API documentation for the Rust compiler and other toolchain components')
             [CompletionResult]::new('--rustdoc', '--rustdoc', [CompletionResultType]::ParameterName, 'Documentation generator for Rust projects')
             [CompletionResult]::new('--std', '--std', [CompletionResultType]::ParameterName, 'Standard library API documentation')
             [CompletionResult]::new('--style-guide', '--style-guide', [CompletionResultType]::ParameterName, 'The Rust Style Guide')
@@ -403,7 +410,8 @@ Register-ArgumentCompleter -Native -CommandName 'rustup' -ScriptBlock {
             break
         }
         'rustup;self;uninstall' {
-            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'y')
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Disable confirmation prompt')
+            [CompletionResult]::new('--no-modify-path', '--no-modify-path', [CompletionResultType]::ParameterName, 'Do not clean up the `PATH` environment variable')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
