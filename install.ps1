@@ -48,7 +48,7 @@ if ($configLink -and ($configLink.Attributes -band [System.IO.FileAttributes]::R
 
 # install cargo packages if cargo is available
 if (Get-Command cargo -ErrorAction SilentlyContinue) {
-    cargo install --locked ripgrep spongebob zoxide taplo-cli tokei
+    cargo install --locked ripgrep spongebob zoxide taplo-cli tokei rumdl
 } else {
     Write-Warning "cargo not found, skipping Rust package installs. Install Rust and cargo and rerun this script to install Rust packages."
 }
